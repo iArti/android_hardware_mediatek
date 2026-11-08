@@ -6,6 +6,7 @@
  */
 
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android/binder_interface_utils.h>
 #include <health-impl/Health.h>
 #include <health/utils.h>
@@ -19,12 +20,32 @@
 #endif
 
 using aidl::android::hardware::health::HalHealthLoop;
-using aidl::android::hardware::health::Health;
+using aidl::android::hardware::health::HealthImpl;
 
 #if !CHARGER_FORCE_NO_UI
 using aidl::android::hardware::health::charger::ChargerCallback;
 using aidl::android::hardware::health::charger::ChargerModeMain;
 #endif
+
+namespace aidl::android::hardware::health {
+// MediaTek fuel gauges can report charge_full_design and charge_full in units
+// that do not match the battery (e.g. 294 mAh for a 5100 mAh pack). A device
+// can set its real design capacity; the full charge value comes from the same
+// broken scale, so it is reported as unknown instead.
+class HealthImpl : public Health {
+  public:
+    using Health::Health;
+
+    void UpdateHealthInfo(HealthInfo* health_info) override {
+        static const int32_t design_capacity_uah = ::android::base::GetIntProperty(
+                "ro.vendor.battery.design_capacity_uah", 0);
+        if (design_capacity_uah > 0) {
+            health_info->batteryFullChargeDesignCapacityUah = design_capacity_uah;
+            health_info->batteryFullChargeUah = -1;
+        }
+    }
+};
+}  // namespace aidl::android::hardware::health
 
 static constexpr const char* gInstanceName = "default";
 static constexpr std::string_view gChargerArg{"--charger"};
@@ -47,7 +68,7 @@ int main(int argc, char** argv) {
     // make a default health service
     auto config = std::make_unique<healthd_config>();
     ::android::hardware::health::InitHealthdConfig(config.get());
-    auto binder = ndk::SharedRefBase::make<Health>(gInstanceName, std::move(config));
+    auto binder = ndk::SharedRefBase::make<HealthImpl>(gInstanceName, std::move(config));
 
     if (argc >= 2 && argv[1] == gChargerArg) {
 #if !CHARGER_FORCE_NO_UI
