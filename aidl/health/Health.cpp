@@ -20,7 +20,6 @@
 #endif
 
 using aidl::android::hardware::health::HalHealthLoop;
-using aidl::android::hardware::health::HealthImpl;
 
 #if !CHARGER_FORCE_NO_UI
 using aidl::android::hardware::health::charger::ChargerCallback;
@@ -68,7 +67,8 @@ int main(int argc, char** argv) {
     // make a default health service
     auto config = std::make_unique<healthd_config>();
     ::android::hardware::health::InitHealthdConfig(config.get());
-    auto binder = ndk::SharedRefBase::make<HealthImpl>(gInstanceName, std::move(config));
+    auto binder = ndk::SharedRefBase::make<aidl::android::hardware::health::HealthImpl>(
+            gInstanceName, std::move(config));
 
     if (argc >= 2 && argv[1] == gChargerArg) {
 #if !CHARGER_FORCE_NO_UI
